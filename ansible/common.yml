@@ -1,0 +1,89 @@
+---
+# Assert: Once this script is called the following should be in place
+# - AWS cloud infrastructure has been deployed
+# - The IoT Core Thing's X509 certificates from S3 have been downloaded and placed on the server
+# - The required packages have been installed on the server (eg. Docker, Python, and Ansible)
+
+# System level updates go here
+
+# - name: Allow users to execute docker commands
+#   shell: usermod -aG docker {{ username }}
+#   become: yes
+
+# Assume we have everything needed on the host
+# We should stage th x509 certificates and any other artifacts necessary in the local folder
+
+- name: Copy docker resource files to the edge gateway
+  ansible.builtin.copy: 
+    src:  ../docker/
+    dest: "{{ repo_root }}/docker"
+    mode: '0644'
+
+- name: Place X509 certificate in appropriate location
+  ansible.builtin.copy: 
+    src: "{{ x509_src }}"
+    dest: "{{ repo_root }}/docker/node-red/certs"
+    mode: '0400'
+
+- name: Update the topic string used in the To IoT Core node
+  ansible.builtin.replace:
+    path: "{{ repo_root }}/docker/node-red/flows.json"
+    regexp: '(.*)"topic": "galway\/(.*)'
+    replace: '\1"topic": "{{ location }}/\2'
+
+- name: Update the topic string used in the Datalake Parser node
+  ansible.builtin.replace:
+    path: "{{ repo_root }}/docker/node-red/flows.json"
+    regexp: '(.*)msgElt.topic = \\"lexmark\/edge\/(.*)'
+    replace: '\1msgElt.topic = \"{{ location }}/edge/\2'
+
+- name: Update the local MQTT broker's IP address used in the mqtt-broker config
+  ansible.builtin.replace:
+    path: "{{ repo_root }}/docker/node-red/flows.json"
+    regexp: '(.*)"broker": "((10|192)\..*|.*pemnet.com)"(.*)'
+    replace: '\1"broker": "{{ mqtt_broker }}"\4'
+
+- name: Update the AWS IoT Core endpoint IP address used in the mqtt-broker config
+  ansible.builtin.replace:
+    path: "{{ repo_root }}/docker/node-red/flows.json"
+    regexp: '(.*)"broker": ".*amazonaws.com"(.*)'
+    replace: '\1"broker": "{{ awsiot_endpoint }}"\2'
+
+# Once everything is staged we can create the edge gateway systemd service
+# https://gist.github.com/mosquito/b23e1c1e5723a7fd9e6568e5cf91180f'
+
+- name: Create systemd wrapper for docker compose
+  become: yes
+  ansible.builtin.copy: 
+    src: "./artifacts/docker-compose@.service"
+    dest: /etc/systemd/system/
+    mode: '0644'
+
+- name: Create a directory if it does not exist
+  become: yes
+  ansible.builtin.file:
+    path: /etc/docker/compose/edge-gateway/
+    state: directory
+    mode: '0755'
+
+- name: Create specific service for edge gateway
+  become: yes
+  ansible.builtin.copy: 
+    src: "{{ repo_root }}/docker/"
+    remote_src: true
+    dest: /etc/docker/compose/edge-gateway/
+    mode: '0755'
+
+- name: Rreload the edge gateway service units
+  become: yes
+  ansible.builtin.systemd:
+    state: stopped
+    name: docker-compose@edge-gateway
+
+- name: Make sure edge gateway service unit is running
+  become: yes
+  ansible.builtin.systemd:
+    state: started
+    name: docker-compose@edge-gateway
+
+# Clean up?

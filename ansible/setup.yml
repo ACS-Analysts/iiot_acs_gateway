@@ -1,0 +1,11 @@
+---
+- name: Setting up Edge Gateway Device for IoT
+  hosts: all
+  #become: yes
+  remote_user: '{{ username }}'
+  vars:
+    region: us-east-1
+
+  tasks:
+    - import_tasks: common.yml
+

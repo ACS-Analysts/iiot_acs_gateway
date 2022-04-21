@@ -1,0 +1,3 @@
+skip_list:  # or 'skip_list' to silence them completely                      │
+  - '502'  # All tasks should be named                                       │
+

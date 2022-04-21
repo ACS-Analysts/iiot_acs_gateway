@@ -1,0 +1,26 @@
+version: "3"
+services:
+  broker:
+    image: eclipse-mosquitto
+    restart: always
+    networks:
+      - default
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - /etc/docker/compose/edge-gateway/mosquitto:/mosquitto:rw
+  node-red:
+    depends_on:
+      - broker
+    image: nodered/node-red
+    restart: always
+    volumes:
+      - /etc/docker/compose/edge-gateway/node-red:/data:rw
+    user: "0"
+    networks:
+      - default
+    ports:
+      - "1880:1880"
+networks:
+  default:
